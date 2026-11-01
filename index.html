@@ -3,25 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Echo Hunt: an audio game for blind and low-vision players</title>
+<title>Echo Hunt: The Sunken Vault, an audio game for blind and low-vision players</title>
 <style>
-  :root { --bg:#10131a; --fg:#f5f1e6; --accent:#ffd23f; --btn:#232a38; --line:#8fb8ff; }
-  * { box-sizing: border-box; }
-  body { margin:0; padding:1rem; background:var(--bg); color:var(--fg);
-         font:1.25rem/1.6 Georgia, "Times New Roman", serif; max-width:40rem; margin-inline:auto; }
-  h1 { font-size:2rem; margin:.5rem 0; }
+  :root { --bg:#07121c; --fg:#e8f1f2; --accent:#ffb703; --btn:#12283a; --line:#4cc9f0; --danger:#ff5d73; }
+  * { box-sizing:border-box; }
+  body { margin:0 auto; padding:1rem; max-width:40rem; background:var(--bg); color:var(--fg);
+         font:1.2rem/1.6 Georgia, "Times New Roman", serif; }
+  h1 { font-size:2.2rem; margin:.4rem 0 0; color:var(--accent); }
+  h2 { font-size:1.4rem; margin-top:2rem; }
+  .tag { margin:0 0 1rem; color:var(--line); }
   p { max-width:60ch; }
-  button { font:inherit; font-weight:bold; color:var(--fg); background:var(--btn);
-           border:3px solid var(--line); border-radius:.6rem; min-height:4rem; padding:.5rem 1rem; cursor:pointer; }
+  button { font:inherit; font-weight:bold; color:var(--fg); background:var(--btn); border:3px solid var(--line);
+           border-radius:.6rem; min-height:4rem; padding:.5rem 1rem; cursor:pointer; }
   button:focus-visible, input:focus-visible { outline:4px solid var(--accent); outline-offset:3px; }
   button:active { background:var(--accent); color:#000; }
   #start { width:100%; background:var(--accent); color:#000; border-color:var(--accent); font-size:1.5rem; }
+  #hud { display:flex; justify-content:space-between; gap:.5rem; flex-wrap:wrap; margin:.5rem 0; font-weight:bold; }
+  #hud span:nth-child(2) { color:var(--danger); }
+  #map { width:100%; aspect-ratio:1; background:#030a10; border:3px solid var(--line); border-radius:.6rem; }
+  #status { margin:1rem 0; padding:1rem; border:3px solid var(--accent); border-radius:.6rem; min-height:6rem; }
   #pad { display:grid; grid-template-columns:repeat(3,1fr); gap:.6rem; margin:1rem 0; }
   #pad .up { grid-column:2; } #pad .left { grid-column:1; grid-row:2; }
-  #pad .ping { grid-column:2; grid-row:2; } #pad .right { grid-column:3; grid-row:2; }
-  #pad .down { grid-column:2; grid-row:3; }
+  #pad .ping { grid-column:2; grid-row:2; background:var(--accent); color:#000; border-color:var(--accent); }
+  #pad .right { grid-column:3; grid-row:2; } #pad .down { grid-column:2; grid-row:3; }
   .row { display:grid; grid-template-columns:repeat(2,1fr); gap:.6rem; }
-  #status { margin:1rem 0; padding:1rem; border:3px solid var(--accent); border-radius:.6rem; min-height:4.5rem; }
   label { display:block; margin:1rem 0; }
   input[type=checkbox] { width:1.6rem; height:1.6rem; vertical-align:middle; margin-right:.5rem; }
   [hidden] { display:none !important; }
@@ -29,157 +34,291 @@
 </head>
 <body>
 <main>
-  <h1>Echo Hunt</h1>
-  <p>A hidden beacon is somewhere on a grid. Listen for its ping, then walk to it. You do not need to see the screen.</p>
+  <h1>Echo Hunt: The Sunken Vault</h1>
+  <p class="tag">An audio adventure. Play with headphones and your eyes closed.</p>
+  <p>Your light has failed deep inside a flooded vault. Find the lost relic, carry it to the exit gate, and escape.
+  Sound is all you have. Something in the dark is listening for you.</p>
 
-  <button id="start">Start game</button>
+  <button id="start">Start the dive</button>
 
-  <section id="game" hidden aria-label="Game controls">
+  <section id="game" hidden aria-label="Game">
+    <div id="hud" aria-hidden="true"><span id="h-level"></span><span id="h-lives"></span><span id="h-scans"></span><span id="h-score"></span></div>
+    <canvas id="map" width="360" height="360" aria-hidden="true"></canvas>
     <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <div id="pad" role="group" aria-label="Movement">
       <button class="up" data-act="n" aria-label="Move north">North</button>
       <button class="left" data-act="w" aria-label="Move west">West</button>
-      <button class="ping" data-act="ping" aria-label="Play beacon ping">Ping</button>
+      <button class="ping" data-act="ping" aria-label="Ping the beacon">Ping</button>
       <button class="right" data-act="e" aria-label="Move east">East</button>
       <button class="down" data-act="s" aria-label="Move south">South</button>
     </div>
-
     <div class="row">
+      <button data-act="scan">Echo scan</button>
       <button data-act="hint">Hint</button>
+      <button data-act="status">Status</button>
+      <button data-act="where">Where am I</button>
       <button data-act="help">Help</button>
       <button data-act="restart">Restart level</button>
-      <button data-act="where">Where am I</button>
     </div>
-
-    <label><input type="checkbox" id="voice"> Use built-in voice (turn off if your screen reader is running)</label>
+    <label><input type="checkbox" id="voice"> Use built-in voice (leave off if your screen reader is running)</label>
   </section>
 
   <h2>How to play</h2>
-  <p>Wear stereo headphones. Move with the arrow keys or W, A, S, D. Press Space to ping.
-  A ping in your left ear means the beacon is west of you. Right ear means east.
-  A high pitch means it is north. A low pitch means it is south. A louder ping means closer.
-  Press H for a hint, and R to restart the level. Reach the beacon to win. Each level adds more squares.</p>
+  <p>You are in a maze of stone passages. Move with the arrow keys or W, A, S, D. Walls stop you with a thud, and
+  after each step you hear which ways are open.</p>
+  <p>The beacon guides you. A ping in your left ear means the target is west, right ear means east.
+  High pitch means north, low pitch means south, louder means closer. Beware: walls are in the way, so the
+  shortest line is not always a path.</p>
+  <p>First find the relic, which shimmers. Then find the exit gate, which rings like a bell.
+  From level 2, the Warden prowls. Its growl gets louder as it nears, and a heartbeat means it is close.
+  Three lives. Press Space to ping, Q for an echo scan that measures each open corridor, H for a hint,
+  T for status, I for position, R to restart the level, and ? for help.</p>
 </main>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const status = $('status'), voiceBox = $('voice');
-  let ctx, size = 5, level = 1, me, goal, moves = 0, lastDist = 0, started = false;
+  const status = $('status'), voiceBox = $('voice'), cv = $('map'), c2 = cv.getContext('2d');
+  const N = 1, E = 2, S = 4, W = 8, DIRS = [N, E, S, W];
+  const DX = { 1:0, 2:1, 4:0, 8:-1 }, DY = { 1:-1, 2:0, 4:1, 8:0 };
+  const NAME = { 1:'north', 2:'east', 4:'south', 8:'west' }, OPP = { 1:4, 2:8, 4:1, 8:2 };
+  const LORE = [
+    'The upper halls. Cold water drips somewhere. All is quiet, for now.',
+    'Something stirs in the dark. The Warden hunts by sound. Move carefully.',
+    'The walls here are older. The Warden is learning your footsteps.',
+    'Deeper vaults. The air tastes of salt and rust.',
+    'The Warden has grown restless. It moves faster now.'
+  ];
+  let ctx, master, size, maze, seen, p, startP, relic, gate, wd, wdStart, moves, lastDist;
+  let level = 1, lives = 3, scans = 3, score = 0, hasRelic = false, started = false, waitNext = false, rip = 0;
 
+  const rnd = n => Math.floor(Math.random() * n);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const px = i => i % size, py = i => Math.floor(i / size);
+
+  // ---------- speech ----------
   const say = text => {
     status.textContent = '';
-    setTimeout(() => status.textContent = text, 30); // forces re-announcement
+    setTimeout(() => status.textContent = text, 30);
     if (voiceBox.checked && 'speechSynthesis' in window) {
-      speechSynthesis.cancel();
-      speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(text));
     }
   };
 
-  const tone = (freq, dur, vol, pan = 0, type = 'sine', delay = 0) => {
-    const t = ctx.currentTime + delay;
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+  // ---------- audio ----------
+  const route = (node, pan) => {
+    if (ctx.createStereoPanner) { const sp = ctx.createStereoPanner(); sp.pan.value = pan; node.connect(sp); sp.connect(master); }
+    else node.connect(master);
+  };
+  const tone = (f, dur, vol, pan = 0, type = 'sine', delay = 0) => {
+    const t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    let node = g;
-    if (ctx.createStereoPanner) {
-      const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); node = p;
-    }
-    o.connect(g); node.connect(ctx.destination);
-    o.start(t); o.stop(t + dur + 0.05);
+    o.connect(g); route(g, pan); o.start(t); o.stop(t + dur + 0.05);
+  };
+  const noise = (dur, cutoff, vol, pan = 0, delay = 0) => {
+    const t = ctx.currentTime + delay, len = Math.floor(ctx.sampleRate * dur);
+    const b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = b; fl.type = 'lowpass'; fl.frequency.value = cutoff;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(fl); fl.connect(g); route(g, pan); s.start(t);
+  };
+  const startAmbience = () => {
+    [55, 82.4].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain(), l = ctx.createOscillator(), lg = ctx.createGain();
+      o.frequency.value = f; g.gain.value = 0.05; l.frequency.value = 0.08 + i * 0.05; lg.gain.value = 0.025;
+      l.connect(lg); lg.connect(g.gain); o.connect(g); g.connect(master); o.start(); l.start();
+    });
+    (function drip() {
+      const pan = Math.random() * 2 - 1, f = 1100 + Math.random() * 900;
+      tone(f, 0.12, 0.07, pan); tone(f, 0.12, 0.03, pan, 'sine', 0.22);
+      setTimeout(drip, 2500 + Math.random() * 4500);
+    })();
   };
 
-  const dist = () => Math.abs(goal.x - me.x) + Math.abs(goal.y - me.y);
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-
-  function ping() {
-    const dx = goal.x - me.x, dy = goal.y - me.y;
-    const pan = clamp(dx / Math.max(1, size / 2), -1, 1);
-    const freq = clamp(520 - dy * 55, 200, 1100);
-    const vol = clamp(0.9 - dist() * (0.8 / (size * 2)), 0.12, 0.9);
-    tone(freq, 0.35, vol, pan, 'triangle');
-  }
-
-  function newLevel() {
-    me = { x: Math.floor(Math.random() * size), y: Math.floor(Math.random() * size) };
-    do { goal = { x: Math.floor(Math.random() * size), y: Math.floor(Math.random() * size) }; }
-    while (goal.x === me.x && goal.y === me.y);
-    moves = 0; lastDist = dist();
-    say(`Level ${level}. The grid is ${size} by ${size}. Press space to ping, or use the arrow keys to move.`);
-    setTimeout(ping, 900);
-  }
-
-  function move(dir) {
-    const d = { n:[0,-1,'north'], s:[0,1,'south'], e:[1,0,'east'], w:[-1,0,'west'] }[dir];
-    const nx = me.x + d[0], ny = me.y + d[1];
-    if (nx < 0 || ny < 0 || nx >= size || ny >= size) {
-      tone(110, 0.25, 0.7, d[0] * 0.8, 'square');
-      return say(`Wall to the ${d[2]}.`);
+  // ---------- maze ----------
+  function gen(n) {
+    const m = Array(n * n).fill(0), vis = Array(n * n).fill(false), st = [0]; vis[0] = true;
+    while (st.length) {
+      const c = st[st.length - 1], x = c % n, y = Math.floor(c / n);
+      const opts = DIRS.filter(d => { const nx = x + DX[d], ny = y + DY[d]; return nx >= 0 && ny >= 0 && nx < n && ny < n && !vis[ny * n + nx]; });
+      if (!opts.length) { st.pop(); continue; }
+      const d = opts[rnd(opts.length)], nc = (y + DY[d]) * n + x + DX[d];
+      m[c] |= d; m[nc] |= OPP[d]; vis[nc] = true; st.push(nc);
     }
-    me = { x: nx, y: ny }; moves++;
-    if (dist() === 0) return win();
-    const now = dist();
-    const trend = now < lastDist ? 'Warmer' : 'Colder';
-    lastDist = now;
-    tone(330, 0.08, 0.35, d[0] * 0.5, 'sine');
-    say(`${d[2]}. ${trend}.`);
-    setTimeout(ping, 220);
+    for (let i = 0; i < n; i++) { // a few loops so the Warden cannot trap you in dead ends
+      const x = rnd(n), y = rnd(n), d = [E, S][rnd(2)], nx = x + DX[d], ny = y + DY[d];
+      if (nx < n && ny < n) { m[y * n + x] |= d; m[ny * n + nx] |= OPP[d]; }
+    }
+    return m;
+  }
+  function bfs(src) {
+    const d = Array(size * size).fill(-1), q = [src]; d[src] = 0;
+    for (let k = 0; k < q.length; k++) {
+      const c = q[k];
+      for (const b of DIRS) if (maze[c] & b) { const n = c + DX[b] + DY[b] * size; if (d[n] < 0) { d[n] = d[c] + 1; q.push(n); } }
+    }
+    return d;
+  }
+  const far = (d, frac, excl) => {
+    const mx = Math.max(...d), pool = d.map((v, i) => i).filter(i => d[i] >= mx * frac && !excl.includes(i));
+    return pool.length ? pool[rnd(pool.length)] : excl.includes(0) ? 1 : 0;
+  };
+  const target = () => hasRelic ? gate : relic;
+  const mDist = () => Math.abs(px(target()) - px(p)) + Math.abs(py(target()) - py(p));
+  const openList = () => DIRS.filter(b => maze[p] & b).map(b => NAME[b]).join(' and ');
+
+  // ---------- drawing ----------
+  function draw() {
+    const s = cv.width / size;
+    c2.clearRect(0, 0, cv.width, cv.height);
+    c2.strokeStyle = '#4cc9f0'; c2.lineWidth = 3; c2.lineCap = 'round';
+    seen.forEach(i => {
+      const X = px(i) * s, Y = py(i) * s, o = maze[i];
+      c2.beginPath();
+      if (!(o & N)) { c2.moveTo(X, Y); c2.lineTo(X + s, Y); }
+      if (!(o & S)) { c2.moveTo(X, Y + s); c2.lineTo(X + s, Y + s); }
+      if (!(o & W)) { c2.moveTo(X, Y); c2.lineTo(X, Y + s); }
+      if (!(o & E)) { c2.moveTo(X + s, Y); c2.lineTo(X + s, Y + s); }
+      c2.stroke();
+    });
+    const cx = (px(p) + .5) * s, cy = (py(p) + .5) * s;
+    c2.fillStyle = '#ffb703'; c2.beginPath(); c2.arc(cx, cy, s * .22, 0, 7); c2.fill();
+    if (rip > 0) { c2.strokeStyle = `rgba(255,183,3,${rip})`; c2.beginPath(); c2.arc(cx, cy, s * (1.8 - rip * 1.5), 0, 7); c2.stroke(); }
+    $('h-level').textContent = `Level ${level}`; $('h-lives').textContent = `Lives ${lives}`;
+    $('h-scans').textContent = `Scans ${scans}`; $('h-score').textContent = `Score ${score}`;
+  }
+  function ripple() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return draw();
+    rip = 1; (function f() { rip -= 0.04; draw(); if (rip > 0) requestAnimationFrame(f); })();
   }
 
+  // ---------- game sounds ----------
+  function beacon(q = 1) {
+    const dx = px(target()) - px(p), dy = py(target()) - py(p);
+    const pan = clamp(dx / Math.max(1, size / 2), -1, 1), f = clamp(520 - dy * 55, 200, 1100);
+    const v = clamp(0.9 - mDist() * 0.8 / (size * 2), 0.12, 0.9) * q;
+    if (hasRelic) { tone(f, 1.1, v * .6, pan); tone(f * 2.76, .6, v * .25, pan); }       // bell: exit gate
+    else { tone(f, .3, v, pan, 'triangle'); tone(f * 1.5, .3, v * .6, pan, 'triangle', .12); } // shimmer: relic
+  }
+  function wardenSound(d) {
+    const pan = clamp((px(wd) - px(p)) / Math.max(1, size / 2), -1, 1), v = clamp(.7 - d * .1, .05, .7);
+    tone(70, .6, v, pan, 'sawtooth'); tone(73, .6, v * .6, pan, 'sawtooth');
+    if (d <= 3) { tone(55, .12, .8, 0, 'sine', .7); tone(50, .12, .6, 0, 'sine', .9); }
+  }
+
+  // ---------- flow ----------
+  function newLevel() {
+    size = Math.min(4 + level, 11); maze = gen(size); seen = new Set(); scans = 3; moves = 0; hasRelic = false;
+    startP = rnd(size * size); p = startP; seen.add(p);
+    relic = far(bfs(p), .6, [p]);
+    gate = far(bfs(relic), .6, [p, relic]);
+    wd = wdStart = far(bfs(p), .6, [p, relic, gate]);
+    lastDist = mDist(); draw();
+    const warn = level >= 2 ? ' The Warden is awake.' : ' This level is safe. Learn the sounds.';
+    say(`Level ${level}. ${LORE[Math.min(level - 1, LORE.length - 1)]}${warn} The grid is ${size} by ${size}. Open: ${openList()}.`);
+    setTimeout(() => beacon(), 1200);
+  }
+  const period = () => level < 4 ? 3 : 2;
+  function stepWarden() {
+    const d = bfs(p); let best = wd;
+    for (const b of DIRS) if (maze[wd] & b) { const n = wd + DX[b] + DY[b] * size; if (d[n] < d[best]) best = n; }
+    wd = best;
+  }
+  function caught() {
+    lives--; noise(.5, 600, .9); tone(70, .8, .8, 0, 'sawtooth'); tone(45, 1, .8, 0, 'square', .1);
+    if (lives <= 0) {
+      say(`The Warden got you. Game over. Final score ${score}. Press Enter to dive again.`);
+      level = 1; lives = 3; score = 0; waitNext = true; return draw();
+    }
+    p = startP; wd = wdStart; draw();
+    say(`The Warden caught you! ${lives} ${lives === 1 ? 'life' : 'lives'} left. You are back at the start. Open: ${openList()}.`);
+  }
   function win() {
-    [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.4, 0.5, 0, 'triangle', i * 0.12));
-    say(`You found the beacon in ${moves} moves. Level ${level} complete. Press Enter for the next level.`);
-    level++; size = Math.min(size + 1, 12); waitNext = true;
+    [523, 659, 784, 1047].forEach((f, i) => tone(f, .5, .5, 0, 'triangle', i * .12));
+    const bonus = 100 * level + Math.max(0, size * size * 2 - moves); score += bonus;
+    say(`You escaped with the relic in ${moves} moves. Level ${level} complete. You earned ${bonus} points. Score ${score}. Press Enter for the next level.`);
+    level++; waitNext = true; draw();
   }
-  let waitNext = false;
-
+  function move(d) {
+    if (!(maze[p] & d)) {
+      noise(.12, 300, .8, DX[d] * .7); tone(90, .15, .5, DX[d] * .7, 'square');
+      return say(`Wall to the ${NAME[d]}.`);
+    }
+    p += DX[d] + DY[d] * size; moves++; seen.add(p);
+    noise(.07, 900, .5, DX[d] * .4);
+    let msg = `${NAME[d][0].toUpperCase() + NAME[d].slice(1)}.`;
+    if (!hasRelic && p === relic) {
+      hasRelic = true; score += 50; [660, 880, 1320].forEach((f, i) => tone(f, .4, .5, 0, 'sine', i * .1));
+      msg += ' You grab the relic! Now find the exit gate. The beacon now rings like a bell.';
+    } else if (p === gate) {
+      if (hasRelic) return win();
+      tone(120, .3, .6, 0, 'square'); msg += ' The gate is sealed. Find the relic first.';
+    }
+    let wdist = 99;
+    if (level >= 2) {
+      if (moves % period() === 0) stepWarden();
+      if (wd === p) return caught();
+      wdist = bfs(p)[wd];
+    }
+    const now = mDist(), trend = now < lastDist ? ' Warmer.' : now > lastDist ? ' Colder.' : '';
+    lastDist = now;
+    msg += `${trend} Open: ${openList()}.`;
+    if (wdist <= 2) msg += ' The Warden is very close!';
+    draw(); say(msg);
+    setTimeout(() => beacon(.8), 250);
+    if (level >= 2) setTimeout(() => wardenSound(wdist), 800);
+  }
+  function scan() {
+    if (scans < 1) return say('No echo scans left this level.');
+    scans--; ripple(); tone(900, .5, .4); tone(1350, .5, .2, 0, 'sine', .1);
+    const out = DIRS.filter(b => maze[p] & b).map(b => {
+      let c = p, n = 0; while (maze[c] & b) { c += DX[b] + DY[b] * size; n++; }
+      return `${NAME[b]} ${n} ${n === 1 ? 'step' : 'steps'}`;
+    });
+    say(`Echo scan. ${out.join(', ')}. ${scans} scans left.`);
+  }
   function hint() {
-    const dx = goal.x - me.x, dy = goal.y - me.y, parts = [];
+    const dx = px(target()) - px(p), dy = py(target()) - py(p), parts = [];
     if (dx) parts.push(`${Math.abs(dx)} ${dx > 0 ? 'east' : 'west'}`);
     if (dy) parts.push(`${Math.abs(dy)} ${dy > 0 ? 'south' : 'north'}`);
-    say(`The beacon is ${parts.join(' and ')}.`);
+    score = Math.max(0, score - 25); draw();
+    say(`The ${hasRelic ? 'exit gate' : 'relic'} is ${parts.join(' and ')}, as the crow flies. Walls may be in the way. Hint costs 25 points.`);
   }
-
-  function help() {
-    say('Arrow keys or W A S D to move. Space to ping. H for a hint. W is taken by movement, so use the Where am I button or press I. R restarts the level. Left ear means west, right ear means east, high pitch means north, low pitch means south, louder means closer.');
-  }
+  const help = () => say('Arrow keys or W A S D move. Space pings. Q echo scan. H hint. T status. I position. R restart level. Left ear is west, right ear is east, high pitch is north, low pitch is south, louder is closer. Relic shimmers, exit gate rings like a bell. A low growl is the Warden.');
 
   function act(a) {
     if (!started) return;
-    if (waitNext && a !== 'restart') { if (a === 'next') { waitNext = false; newLevel(); } return; }
-    if ('nsew'.includes(a) && a.length === 1) move(a);
-    else if (a === 'ping') ping();
+    if (waitNext) { if (['next', 'ping', 'restart'].includes(a)) { waitNext = false; newLevel(); } return; }
+    if (a.length === 1) move({ n:N, e:E, s:S, w:W }[a]);
+    else if (a === 'ping') { ripple(); beacon(); }
+    else if (a === 'scan') scan();
     else if (a === 'hint') hint();
     else if (a === 'help') help();
-    else if (a === 'where') say(`You are at column ${me.x + 1}, row ${me.y + 1} of ${size}. Row 1 is the north edge.`);
-    else if (a === 'restart') { waitNext = false; newLevel(); }
+    else if (a === 'status') say(`Level ${level}. Lives ${lives}. Echo scans ${scans}. Score ${score}. Goal: ${hasRelic ? 'reach the exit gate' : 'find the relic'}.`);
+    else if (a === 'where') say(`Column ${px(p) + 1}, row ${py(p) + 1} of ${size}. Row 1 is the north edge. Open: ${openList()}.`);
+    else if (a === 'restart') newLevel();
   }
 
   $('start').addEventListener('click', () => {
-    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-    ctx.resume();
-    started = true;
-    $('start').hidden = true; $('game').hidden = false;
-    voiceBox.checked = false;
-    newLevel();
-    document.querySelector('.ping').focus();
+    ctx = new (window.AudioContext || window.webkitAudioContext)(); ctx.resume();
+    master = ctx.createGain(); master.gain.value = .8; master.connect(ctx.destination);
+    started = true; $('start').hidden = true; $('game').hidden = false; voiceBox.checked = false;
+    startAmbience(); newLevel(); document.querySelector('.ping').focus();
   });
-
-  document.querySelectorAll('[data-act]').forEach(b =>
-    b.addEventListener('click', () => act(waitNext && b.dataset.act === 'ping' ? 'next' : b.dataset.act)));
-
+  document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
   const keys = { ArrowUp:'n', w:'n', ArrowDown:'s', s:'s', ArrowLeft:'w', a:'w', ArrowRight:'e', d:'e',
-                 ' ':'ping', h:'hint', r:'restart', i:'where', '?':'help', Enter:'next' };
+                 ' ':'ping', q:'scan', h:'hint', t:'status', i:'where', r:'restart', '?':'help', Enter:'next' };
   document.addEventListener('keydown', e => {
-    if (!started || e.target.tagName === 'INPUT') return;
+    if (!started || e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (!keys[k]) return;
-    if (e.target.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')) return; // let focused buttons work normally
-    e.preventDefault();
-    act(keys[k]);
+    if (e.target.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')) return;
+    e.preventDefault(); act(keys[k]);
   });
 })();
 </script>
