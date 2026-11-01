@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo Hunt: an audio game for blind and low-vision players</title>
+<style>
+  :root { --bg:#10131a; --fg:#f5f1e6; --accent:#ffd23f; --btn:#232a38; --line:#8fb8ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:1rem; background:var(--bg); color:var(--fg);
+         font:1.25rem/1.6 Georgia, "Times New Roman", serif; max-width:40rem; margin-inline:auto; }
+  h1 { font-size:2rem; margin:.5rem 0; }
+  p { max-width:60ch; }
+  button { font:inherit; font-weight:bold; color:var(--fg); background:var(--btn);
+           border:3px solid var(--line); border-radius:.6rem; min-height:4rem; padding:.5rem 1rem; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:4px solid var(--accent); outline-offset:3px; }
+  button:active { background:var(--accent); color:#000; }
+  #start { width:100%; background:var(--accent); color:#000; border-color:var(--accent); font-size:1.5rem; }
+  #pad { display:grid; grid-template-columns:repeat(3,1fr); gap:.6rem; margin:1rem 0; }
+  #pad .up { grid-column:2; } #pad .left { grid-column:1; grid-row:2; }
+  #pad .ping { grid-column:2; grid-row:2; } #pad .right { grid-column:3; grid-row:2; }
+  #pad .down { grid-column:2; grid-row:3; }
+  .row { display:grid; grid-template-columns:repeat(2,1fr); gap:.6rem; }
+  #status { margin:1rem 0; padding:1rem; border:3px solid var(--accent); border-radius:.6rem; min-height:4.5rem; }
+  label { display:block; margin:1rem 0; }
+  input[type=checkbox] { width:1.6rem; height:1.6rem; vertical-align:middle; margin-right:.5rem; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Echo Hunt</h1>
+  <p>A hidden beacon is somewhere on a grid. Listen for its ping, then walk to it. You do not need to see the screen.</p>
+
+  <button id="start">Start game</button>
+
+  <section id="game" hidden aria-label="Game controls">
+    <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="pad" role="group" aria-label="Movement">
+      <button class="up" data-act="n" aria-label="Move north">North</button>
+      <button class="left" data-act="w" aria-label="Move west">West</button>
+      <button class="ping" data-act="ping" aria-label="Play beacon ping">Ping</button>
+      <button class="right" data-act="e" aria-label="Move east">East</button>
+      <button class="down" data-act="s" aria-label="Move south">South</button>
+    </div>
+
+    <div class="row">
+      <button data-act="hint">Hint</button>
+      <button data-act="help">Help</button>
+      <button data-act="restart">Restart level</button>
+      <button data-act="where">Where am I</button>
+    </div>
+
+    <label><input type="checkbox" id="voice"> Use built-in voice (turn off if your screen reader is running)</label>
+  </section>
+
+  <h2>How to play</h2>
+  <p>Wear stereo headphones. Move with the arrow keys or W, A, S, D. Press Space to ping.
+  A ping in your left ear means the beacon is west of you. Right ear means east.
+  A high pitch means it is north. A low pitch means it is south. A louder ping means closer.
+  Press H for a hint, and R to restart the level. Reach the beacon to win. Each level adds more squares.</p>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const status = $('status'), voiceBox = $('voice');
+  let ctx, size = 5, level = 1, me, goal, moves = 0, lastDist = 0, started = false;
+
+  const say = text => {
+    status.textContent = '';
+    setTimeout(() => status.textContent = text, 30); // forces re-announcement
+    if (voiceBox.checked && 'speechSynthesis' in window) {
+      speechSynthesis.cancel();
+      speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    }
+  };
+
+  const tone = (freq, dur, vol, pan = 0, type = 'sine', delay = 0) => {
+    const t = ctx.currentTime + delay;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let node = g;
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); node = p;
+    }
+    o.connect(g); node.connect(ctx.destination);
+    o.start(t); o.stop(t + dur + 0.05);
+  };
+
+  const dist = () => Math.abs(goal.x - me.x) + Math.abs(goal.y - me.y);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function ping() {
+    const dx = goal.x - me.x, dy = goal.y - me.y;
+    const pan = clamp(dx / Math.max(1, size / 2), -1, 1);
+    const freq = clamp(520 - dy * 55, 200, 1100);
+    const vol = clamp(0.9 - dist() * (0.8 / (size * 2)), 0.12, 0.9);
+    tone(freq, 0.35, vol, pan, 'triangle');
+  }
+
+  function newLevel() {
+    me = { x: Math.floor(Math.random() * size), y: Math.floor(Math.random() * size) };
+    do { goal = { x: Math.floor(Math.random() * size), y: Math.floor(Math.random() * size) }; }
+    while (goal.x === me.x && goal.y === me.y);
+    moves = 0; lastDist = dist();
+    say(`Level ${level}. The grid is ${size} by ${size}. Press space to ping, or use the arrow keys to move.`);
+    setTimeout(ping, 900);
+  }
+
+  function move(dir) {
+    const d = { n:[0,-1,'north'], s:[0,1,'south'], e:[1,0,'east'], w:[-1,0,'west'] }[dir];
+    const nx = me.x + d[0], ny = me.y + d[1];
+    if (nx < 0 || ny < 0 || nx >= size || ny >= size) {
+      tone(110, 0.25, 0.7, d[0] * 0.8, 'square');
+      return say(`Wall to the ${d[2]}.`);
+    }
+    me = { x: nx, y: ny }; moves++;
+    if (dist() === 0) return win();
+    const now = dist();
+    const trend = now < lastDist ? 'Warmer' : 'Colder';
+    lastDist = now;
+    tone(330, 0.08, 0.35, d[0] * 0.5, 'sine');
+    say(`${d[2]}. ${trend}.`);
+    setTimeout(ping, 220);
+  }
+
+  function win() {
+    [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.4, 0.5, 0, 'triangle', i * 0.12));
+    say(`You found the beacon in ${moves} moves. Level ${level} complete. Press Enter for the next level.`);
+    level++; size = Math.min(size + 1, 12); waitNext = true;
+  }
+  let waitNext = false;
+
+  function hint() {
+    const dx = goal.x - me.x, dy = goal.y - me.y, parts = [];
+    if (dx) parts.push(`${Math.abs(dx)} ${dx > 0 ? 'east' : 'west'}`);
+    if (dy) parts.push(`${Math.abs(dy)} ${dy > 0 ? 'south' : 'north'}`);
+    say(`The beacon is ${parts.join(' and ')}.`);
+  }
+
+  function help() {
+    say('Arrow keys or W A S D to move. Space to ping. H for a hint. W is taken by movement, so use the Where am I button or press I. R restarts the level. Left ear means west, right ear means east, high pitch means north, low pitch means south, louder means closer.');
+  }
+
+  function act(a) {
+    if (!started) return;
+    if (waitNext && a !== 'restart') { if (a === 'next') { waitNext = false; newLevel(); } return; }
+    if ('nsew'.includes(a) && a.length === 1) move(a);
+    else if (a === 'ping') ping();
+    else if (a === 'hint') hint();
+    else if (a === 'help') help();
+    else if (a === 'where') say(`You are at column ${me.x + 1}, row ${me.y + 1} of ${size}. Row 1 is the north edge.`);
+    else if (a === 'restart') { waitNext = false; newLevel(); }
+  }
+
+  $('start').addEventListener('click', () => {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume();
+    started = true;
+    $('start').hidden = true; $('game').hidden = false;
+    voiceBox.checked = false;
+    newLevel();
+    document.querySelector('.ping').focus();
+  });
+
+  document.querySelectorAll('[data-act]').forEach(b =>
+    b.addEventListener('click', () => act(waitNext && b.dataset.act === 'ping' ? 'next' : b.dataset.act)));
+
+  const keys = { ArrowUp:'n', w:'n', ArrowDown:'s', s:'s', ArrowLeft:'w', a:'w', ArrowRight:'e', d:'e',
+                 ' ':'ping', h:'hint', r:'restart', i:'where', '?':'help', Enter:'next' };
+  document.addEventListener('keydown', e => {
+    if (!started || e.target.tagName === 'INPUT') return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (!keys[k]) return;
+    if (e.target.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')) return; // let focused buttons work normally
+    e.preventDefault();
+    act(keys[k]);
+  });
+})();
+</script>
+</body>
+</html>
